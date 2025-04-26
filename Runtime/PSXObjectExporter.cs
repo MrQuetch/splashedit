@@ -1,30 +1,34 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace SplashEdit.RuntimeCode
 {
     [RequireComponent(typeof(Renderer))]
     public class PSXObjectExporter : MonoBehaviour
     {
-        public PSXBPP BitDepth = PSXBPP.TEX_8BIT; // Defines the bit depth of the texture (e.g., 4BPP, 8BPP)
-
         public List<PSXTexture2D> Textures { get; set; } = new List<PSXTexture2D>(); // Stores the converted PlayStation-style texture
         public PSXMesh Mesh { get; set; } // Stores the converted PlayStation-style mesh
-
-
-        [SerializeField] private bool PreviewNormals = false;
+        [Header("Export Settings")]
+        [FormerlySerializedAs("BitDepth")]
+        [SerializeField] private PSXBPP bitDepth = PSXBPP.TEX_8BIT; // Defines the bit depth of the texture (e.g., 4BPP, 8BPP)
+        [SerializeField] private bool useLightSources = true; // If true, the light data will be baked into vertex colors
+        [SerializeField] private Color objectColor = new Color(128, 128, 128, 0); // If the above is false, this is the color to use for the vertices
+        [Header("Gizmo Settings")]
+        [FormerlySerializedAs("PreviewNormals")]
+        [SerializeField] private bool previewNormals = false;
         [SerializeField] private float normalPreviewLength = 0.5f; // Length of the normal lines
+
+        private readonly Dictionary<(int, PSXBPP), PSXTexture2D> cache = new();
 
         private void OnDrawGizmos()
         {
-
-            if (PreviewNormals)
+            if (previewNormals)
             {
                 MeshFilter filter = GetComponent<MeshFilter>();
 
                 if (filter != null)
                 {
-
                     Mesh mesh = filter.sharedMesh;
                     Vector3[] vertices = mesh.vertices;
                     Vector3[] normals = mesh.normals;
@@ -76,8 +80,17 @@ namespace SplashEdit.RuntimeCode
 
                         if (tex2D != null)
                         {
-                            PSXTexture2D tex = PSXTexture2D.CreateFromTexture2D(tex2D, BitDepth);
-                            tex.OriginalTexture = tex2D; // Store reference to the original texture
+                            PSXTexture2D tex;
+                            if (cache.ContainsKey((tex2D.GetInstanceID(), bitDepth)))
+                            {
+                                tex = cache[(tex2D.GetInstanceID(), bitDepth)];
+                            }
+                            else
+                            {
+                                tex = PSXTexture2D.CreateFromTexture2D(tex2D, bitDepth);
+                                tex.OriginalTexture = tex2D; // Store reference to the original texture
+                                cache.Add((tex2D.GetInstanceID(), bitDepth), tex);
+                            }
                             Textures.Add(tex);
                         }
                     }
@@ -109,7 +122,7 @@ namespace SplashEdit.RuntimeCode
             Renderer renderer = GetComponent<Renderer>();
             if (renderer != null)
             {
-                Mesh = PSXMesh.CreateFromUnityRenderer(renderer, GTEScaling, transform, Textures);
+                Mesh = PSXMesh.CreateFromUnityRenderer(renderer, GTEScaling, transform, Textures, useLightSources, objectColor);
             }
         }
     }
