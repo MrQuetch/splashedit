@@ -40,6 +40,7 @@ namespace SplashEdit.RuntimeCode
     {
         public List<Tri> Triangles;
 
+
         private static Vector3[] RecalculateSmoothNormals(Mesh mesh)
         {
             Vector3[] normals = new Vector3[mesh.vertexCount];
@@ -81,14 +82,18 @@ namespace SplashEdit.RuntimeCode
         /// <param name="textureWidth">Width of the texture (default is 256).</param>
         /// <param name="textureHeight">Height of the texture (default is 256).</param>
         /// <param name="transform">Optional transform to convert vertices to world space.</param>
+        /// <param name="lightSource">Bake light source data into vertex colors in the mesh.</param>
+        /// <param name="objectColor">Color to use for the mesh if a light source is not used.</param>
         /// <returns>A new PSXMesh containing the converted triangles.</returns>
-        public static PSXMesh CreateFromUnityRenderer(Renderer renderer, float GTEScaling, Transform transform, List<PSXTexture2D> textures)
+        public static PSXMesh CreateFromUnityRenderer(Renderer renderer, float GTEScaling, Transform transform, List<PSXTexture2D> textures, bool useLightSources, Color objectColor)
         {
             PSXMesh psxMesh = new PSXMesh { Triangles = new List<Tri>() };
 
             // Get materials and mesh.
             Material[] materials = renderer.sharedMaterials;
             Mesh mesh = renderer.GetComponent<MeshFilter>().sharedMesh;
+            
+            bool uvWarning = false;
 
             // Iterate over each submesh.
             for (int submeshIndex = 0; submeshIndex < materials.Length; submeshIndex++)
@@ -128,8 +133,20 @@ namespace SplashEdit.RuntimeCode
                     Vector3 wv = transform.TransformPoint(vertices[index]);
                     // Transform the normals to world space.
                     Vector3 wn = transform.TransformDirection(smoothNormals[index]).normalized;
-                    // Compute lighting for each vertex.
-                    Color c = PSXLightingBaker.ComputeLighting(wv, wn);
+
+                    Color c;
+
+                    if (useLightSources == true)
+                    {
+                        // Compute lighting for each vertex.
+                        c = PSXLightingBaker.ComputeLighting(wv, wn);
+                    }
+                    else
+                    {
+                        // Replace object color.
+                        c = objectColor;
+                    };
+
                     // Convert vertex to PSX format, including fixed-point conversion and shading.
                     return ConvertToPSXVertex(v, GTEScaling, normals[index], uv[index], psxTexture?.Width, psxTexture?.Height, c);
                 }
@@ -147,9 +164,20 @@ namespace SplashEdit.RuntimeCode
                         (vid1, vid2) = (vid2, vid1);
                     }
 
+                    // Set uvWarning to true if uv cooordinates are outside the range [0, 1].
+                    if (uv[vid0].x < 0 || uv[vid0].y < 0 || uv[vid1].x < 0 || uv[vid1].y < 0 || uv[vid2].x < 0 || uv[vid2].y < 0)
+                        uvWarning = true;
+                    if (uv[vid0].x > 1 || uv[vid0].y > 1 || uv[vid1].x > 1 || uv[vid1].y > 1 || uv[vid2].x > 1 || uv[vid2].y > 1)
+                        uvWarning = true;
+
                     // Add the constructed triangle to the mesh.
                     psxMesh.Triangles.Add(new Tri { v0 = convertData(vid0), v1 = convertData(vid1), v2 = convertData(vid2), Texture = psxTexture });
                 }
+            }
+
+            if(uvWarning)
+            {
+                Debug.LogWarning($"UV coordinates on mesh {mesh.name} are outside the range [0, 1]. Texture repeat DOES NOT WORK right now. You may have broken textures.");
             }
 
             return psxMesh;
@@ -183,6 +211,9 @@ namespace SplashEdit.RuntimeCode
                 nz = PSXTrig.ConvertCoordinateToPSX(normal.z),
 
                 // Map UV coordinates to a byte range after scaling based on texture dimensions.
+
+
+
                 u = (byte)Mathf.Clamp(uv.x * (width - 1), 0, 255),
                 v = (byte)Mathf.Clamp((1.0f - uv.y) * (height - 1), 0, 255),
 
