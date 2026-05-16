@@ -9,6 +9,7 @@ namespace SplashEdit.RuntimeCode
         Image    = 0,
         Box      = 1,
         Text     = 2,
-        Progress = 3
+        Progress = 3,
+        Line     = 4,
     }
 }
