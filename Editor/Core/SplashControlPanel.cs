@@ -2426,9 +2426,10 @@ namespace SplashEdit.EditorCode
         private void RefreshToolchainStatus()
         {
             _hasMIPS = ToolchainChecker.IsToolAvailable(
-                Application.platform == RuntimePlatform.WindowsEditor
-                    ? "mipsel-none-elf-gcc"
-                    : "mipsel-linux-gnu-gcc");
+                "mipsel-none-elf-gcc",
+                "mipsel-linux-gnu-gcc",
+                "mipsel-elf-gcc"
+            );
 
             _hasMake = ToolchainChecker.IsToolAvailable("make");
 
