@@ -283,6 +283,13 @@ namespace SplashEdit.RuntimeCode
                     continue;
                 }
 
+                PSXUILine line = t.GetComponent<PSXUILine>();
+                if (line != null)
+                {
+                    CollectSingleLine(line, canvasRect, scaleX, scaleY, resolution, elements);
+                    continue;
+                }
+
                 PSXUIText txt = t.GetComponent<PSXUIText>();
                 if (txt != null)
                 {
@@ -381,6 +388,34 @@ namespace SplashEdit.RuntimeCode
                 ColorR = (byte)Mathf.Clamp(Mathf.RoundToInt(box.BoxColor.r * 255f), 0, 255),
                 ColorG = (byte)Mathf.Clamp(Mathf.RoundToInt(box.BoxColor.g * 255f), 0, 255),
                 ColorB = (byte)Mathf.Clamp(Mathf.RoundToInt(box.BoxColor.b * 255f), 0, 255),
+            });
+        }
+
+        private static void CollectSingleLine(
+            PSXUILine line, RectTransform canvasRect,
+            float scaleX, float scaleY, Vector2 resolution,
+            List<PSXUIElementData> elements)
+        {
+            RectTransform rt = line.GetComponent<RectTransform>();
+            if (rt == null) return;
+
+            BakeLayout(rt, canvasRect, scaleX, scaleY, resolution,
+                out short x, out short y, out short w, out short h,
+                out byte amin_x, out byte amin_y, out byte amax_x, out byte amax_y);
+
+            elements.Add(new PSXUIElementData
+            {
+                Type = PSXUIElementType.Line,
+                StartVisible = line.StartVisible,
+                Name = TruncateName(line.ElementName),
+                // Width and height are used for the second endpoint of the line
+                X = (byte)Mathf.RoundToInt(line.Point1.x), Y = (byte)Mathf.RoundToInt(line.Point1.y),
+                W = (byte)Mathf.RoundToInt(line.Point2.x), H = (byte)Mathf.RoundToInt(line.Point2.y),
+                AnchorMinX = amin_x, AnchorMinY = amin_y,
+                AnchorMaxX = amax_x, AnchorMaxY = amax_y,
+                ColorR = (byte)Mathf.Clamp(Mathf.RoundToInt(line.LineColor.r * 255f), 0, 255),
+                ColorG = (byte)Mathf.Clamp(Mathf.RoundToInt(line.LineColor.g * 255f), 0, 255),
+                ColorB = (byte)Mathf.Clamp(Mathf.RoundToInt(line.LineColor.b * 255f), 0, 255),
             });
         }
 
@@ -551,6 +586,38 @@ namespace SplashEdit.RuntimeCode
                     ColorR = (byte)Mathf.Clamp(Mathf.RoundToInt(box.BoxColor.r * 255f), 0, 255),
                     ColorG = (byte)Mathf.Clamp(Mathf.RoundToInt(box.BoxColor.g * 255f), 0, 255),
                     ColorB = (byte)Mathf.Clamp(Mathf.RoundToInt(box.BoxColor.b * 255f), 0, 255),
+                });
+            }
+        }
+
+        private static void CollectLines(
+            Transform root, RectTransform canvasRect,
+            float scaleX, float scaleY, Vector2 resolution,
+            List<PSXUIElementData> elements)
+        {
+            PSXUILine[] lines = root.GetComponentsInChildren<PSXUILine>(true);
+            foreach (PSXUILine line in lines)
+            {
+                RectTransform rt = line.GetComponent<RectTransform>();
+                if (rt == null) continue;
+
+                BakeLayout(rt, canvasRect, scaleX, scaleY, resolution,
+                    out short x, out short y, out short w, out short h,
+                    out byte amin_x, out byte amin_y, out byte amax_x, out byte amax_y);
+
+                elements.Add(new PSXUIElementData
+                {
+                    Type = PSXUIElementType.Line,
+                    StartVisible = line.StartVisible,
+                    Name = TruncateName(line.ElementName),
+                    // Width and height are used for the second endpoint of the line
+                    X = (byte)Mathf.RoundToInt(line.Point1.x), Y = (byte)Mathf.RoundToInt(line.Point1.y),
+                    W = (byte)Mathf.RoundToInt(line.Point2.x), H = (byte)Mathf.RoundToInt(line.Point2.y),
+                    AnchorMinX = amin_x, AnchorMinY = amin_y,
+                    AnchorMaxX = amax_x, AnchorMaxY = amax_y,
+                    ColorR = (byte)Mathf.Clamp(Mathf.RoundToInt(line.LineColor.r * 255f), 0, 255),
+                    ColorG = (byte)Mathf.Clamp(Mathf.RoundToInt(line.LineColor.g * 255f), 0, 255),
+                    ColorB = (byte)Mathf.Clamp(Mathf.RoundToInt(line.LineColor.b * 255f), 0, 255),
                 });
             }
         }

@@ -877,6 +877,13 @@ namespace SplashEdit.RuntimeCode
                                     writer.Write(el.FontIndex);      // [0] font index (0=system, 1+=custom)
                                     writer.Write(new byte[15]);      // [1-15] padding
                                     break;
+                                case PSXUIElementType.Line:
+                                    writer.Write(el.X);
+                                    writer.Write(el.Y);
+                                    writer.Write(el.W);
+                                    writer.Write(el.H);
+                                    writer.Write(new byte[8]);
+                                    break;
                                 default:
                                     writer.Write(new byte[16]);      // zeroed
                                     break;

@@ -35,6 +35,9 @@ namespace SplashEdit.EditorCode
                 var box = child.GetComponent<PSXUIBox>();
                 if (box != null) { DrawBox(box, childSelected); continue; }
 
+                var line = child.GetComponent<PSXUILine>();
+                if (line != null) { DrawLine(line, childSelected); continue; }
+
                 var image = child.GetComponent<PSXUIImage>();
                 if (image != null) { DrawImage(image, childSelected); continue; }
 
@@ -67,6 +70,35 @@ namespace SplashEdit.EditorCode
             fill.a = selected ? 1f : 0.9f;
             Color borderColor = selected ? Color.white : new Color(1, 1, 1, 0.5f);
             Handles.DrawSolidRectangleWithOutline(corners, fill, borderColor);
+        }
+
+        // This converts from Unity's -160 + 160 to the PS1's 0 - 320 screen coordinates
+        static Vector2 ToCanvasSpace(Vector2 p, RectTransform canvas)
+        {
+            return new Vector2(
+                p.x - canvas.rect.width * 0.5f,
+                canvas.rect.height * 0.5f - p.y
+            );
+        }
+
+        static void DrawLine(PSXUILine line, bool selected)
+        {
+            Canvas canvas = line.GetComponentInParent<Canvas>();
+            if (canvas == null) return;
+
+            RectTransform canvasRT = canvas.GetComponent<RectTransform>();
+
+            Vector2 start = ToCanvasSpace(line.Point1, canvasRT);
+            Vector2 end = ToCanvasSpace(line.Point2, canvasRT);
+
+            Vector3 worldStart = canvasRT.TransformPoint(start);
+            Vector3 worldEnd = canvasRT.TransformPoint(end);
+
+            Color c = line.LineColor;
+            c.a = selected ? 1f : 0.9f;
+
+            Handles.color = c;
+            Handles.DrawLine(worldStart, worldEnd, 2f);
         }
 
         static void DrawImage(PSXUIImage image, bool selected)
