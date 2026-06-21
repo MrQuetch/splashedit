@@ -79,6 +79,31 @@ public static class ToolchainChecker
             if (!string.IsNullOrEmpty(output))
                 return true;
 
+            // On Linux, also try the mipsel-none-elf variant if checking for mipsel-linux-gnu
+            if (Application.platform != RuntimePlatform.WindowsEditor && 
+                toolName.Contains("mipsel-linux-gnu"))
+            {
+                Process process2 = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = command,
+                        Arguments = toolName.Replace("mipsel-linux-gnu", "mipsel-none-elf"),
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+                
+                process2.Start();
+                string output2 = process2.StandardOutput.ReadToEnd().Trim();
+                process2.WaitForExit();
+
+                if (!string.IsNullOrEmpty(output2))
+                    return true;
+            }
+
             // Additional fallback for MIPS tools on Windows in local MIPS path
             if (Application.platform == RuntimePlatform.WindowsEditor &&
                 toolName.StartsWith("mipsel-none-elf-"))
