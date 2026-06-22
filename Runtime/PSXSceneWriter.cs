@@ -70,6 +70,13 @@ namespace SplashEdit.RuntimeCode
             public bool fogEnabled;
             public Color fogColor;
             public int fogDensity;      // 1-10
+
+            // Memory card save configuration (v21)
+            public bool memCardEnabled;
+            public string memCardRegion;     // 2 chars, e.g. "BA"/"BE"/"BI"
+            public string memCardProduct;    // up to 10 chars, e.g. "SLUS-00000"
+            public string memCardTitle;      // ASCII title shown in the BIOS
+            public Texture2D[] memCardIcons; // 1..3 frames, each exactly 16x16
         }
 
         // ─── Offset bookkeeping ───
@@ -154,11 +161,11 @@ namespace SplashEdit.RuntimeCode
                     exporterIndex[scene.exporters[i]] = i;
 
                 // ──────────────────────────────────────────────────────
-                // Header (120 bytes — splashpack v20)
+                // Header (128 bytes — splashpack v21)
                 // ──────────────────────────────────────────────────────
                 writer.Write('S');
                 writer.Write('P');
-                writer.Write((ushort)20);
+                writer.Write((ushort)21);
                 writer.Write((ushort)luaFiles.Count);
                 writer.Write((ushort)scene.exporters.Length);
                 writer.Write((ushort)scene.atlases.Length);
@@ -285,6 +292,12 @@ namespace SplashEdit.RuntimeCode
                 writer.Write((ushort)0); // pad_skin
                 long skinTableOffsetPos = writer.BaseStream.Position;
                 writer.Write((uint)0); // skinTableOffset placeholder
+
+                // Memory card header fields (v21). These 8 bytes grow the header
+                // from 120 to 128; everything above is unchanged.
+                long memcardTableOffsetPos = writer.BaseStream.Position;
+                writer.Write((uint)0); // memcardTableOffset placeholder
+                writer.Write((uint)0); // reservedMemcard
 
                 // ──────────────────────────────────────────────────────
                 // Lua file metadata
@@ -1019,6 +1032,21 @@ namespace SplashEdit.RuntimeCode
                     writer.Seek((int)curPos, SeekOrigin.Begin);
                 }
 
+                // Memory card save configuration (v21). Fixed 464-byte section,
+                // referenced by memcardTableOffset in the header.
+                if (scene.memCardEnabled)
+                {
+                    AlignToFourBytes(writer);
+                    long memcardStart = writer.BaseStream.Position;
+                    {
+                        long curPos = writer.BaseStream.Position;
+                        writer.Seek((int)memcardTableOffsetPos, SeekOrigin.Begin);
+                        writer.Write((uint)memcardStart);
+                        writer.Seek((int)curPos, SeekOrigin.Begin);
+                    }
+                    WriteMemcardSection(writer, scene, log);
+                }
+
                 // Backfill live data offsets (lua, mesh — these still point within the splashpack)
                 BackfillOffsets(writer, luaOffset, "lua", log);
                 BackfillOffsets(writer, meshOffset, "mesh", log);
@@ -1237,6 +1265,86 @@ namespace SplashEdit.RuntimeCode
                 writer.Seek((int)data.PlaceholderPositions[i], SeekOrigin.Begin);
                 writer.Write((int)data.DataOffsets[i]);
             }
+        }
+
+        // ─── Memory card section (v21) ───
+
+        // Writes exactly `length` bytes of ASCII, truncating or zero-padding.
+        private static void WriteFixedAscii(BinaryWriter writer, string s, int length)
+        {
+            int n = s?.Length ?? 0;
+            for (int i = 0; i < length; i++)
+            {
+                byte b = (i < n) ? (byte)(s[i] & 0x7F) : (byte)0;
+                writer.Write(b);
+            }
+        }
+
+        // Converts a 16x16 texture to a 16-colour BGR555 CLUT and a 128-byte
+        // 4bpp bitmap (two pixels per byte, low nibble = left pixel, top row
+        // first). Reuses the same quantizer as scene textures.
+        private static void ConvertIcon(Texture2D tex, ushort[] clut, byte[] pixels, Action<string, LogType> log)
+        {
+            for (int i = 0; i < 16; i++) clut[i] = 0;
+            for (int i = 0; i < 128; i++) pixels[i] = 0;
+            if (tex == null) return;
+            if (tex.width != 16 || tex.height != 16)
+            {
+                log?.Invoke($"Memory card icon '{tex.name}' must be exactly 16x16 (got {tex.width}x{tex.height})", LogType.Error);
+                return;
+            }
+
+            PSXTexture2D psx = PSXTexture2D.CreateFromTexture2D(tex, PSXBPP.TEX_4BIT);
+
+            if (psx.ColorPalette != null)
+            {
+                int count = Mathf.Min(psx.ColorPalette.Count, 16);
+                for (int i = 0; i < count; i++) clut[i] = psx.ColorPalette[i].Pack();
+            }
+
+            // PixelIndices y=0 is the bottom row, so flip to write top row first.
+            for (int row = 0; row < 16; row++)
+            {
+                int y = 15 - row;
+                for (int x = 0; x < 16; x += 2)
+                {
+                    int lo = psx.PixelIndices[x, y] & 0xF;
+                    int hi = psx.PixelIndices[x + 1, y] & 0xF;
+                    pixels[row * 8 + (x >> 1)] = (byte)(lo | (hi << 4));
+                }
+            }
+        }
+
+        // Writes the fixed 464-byte SPLASHPACKMemcard section.
+        private static void WriteMemcardSection(BinaryWriter writer, in SceneData scene, Action<string, LogType> log)
+        {
+            WriteFixedAscii(writer, scene.memCardRegion, 2);
+            WriteFixedAscii(writer, scene.memCardProduct, 10);
+            WriteFixedAscii(writer, scene.memCardTitle, 32);
+
+            int frameCount = scene.memCardIcons?.Length ?? 0;
+            if (frameCount < 1) frameCount = 1;
+            if (frameCount > 3) frameCount = 3;
+            writer.Write((byte)frameCount);
+            writer.Write((byte)0);    // mcPad0
+            writer.Write((ushort)0);  // mcPad1
+
+            // The CLUT is taken from the first frame; animated frames are
+            // expected to share that palette.
+            ushort[] clut = new ushort[16];
+            byte[][] frames = new byte[3][];
+            for (int f = 0; f < 3; f++)
+            {
+                frames[f] = new byte[128];
+                Texture2D tex = (scene.memCardIcons != null && f < scene.memCardIcons.Length)
+                    ? scene.memCardIcons[f] : null;
+                ushort[] frameClut = new ushort[16];
+                ConvertIcon(tex, frameClut, frames[f], log);
+                if (f == 0) clut = frameClut;
+            }
+
+            for (int i = 0; i < 16; i++) writer.Write(clut[i]);
+            for (int f = 0; f < 3; f++) writer.Write(frames[f], 0, 128);
         }
     }
 }

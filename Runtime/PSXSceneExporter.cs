@@ -57,6 +57,9 @@ namespace SplashEdit.RuntimeCode
                  "updated during scene load. If null, no loading screen is shown.")]
         public GameObject LoadingScreenPrefab;
 
+        // Memory card save settings are global (project-wide) and live in the
+        // PSXData asset; edit them in the SplashEdit Control Panel.
+
         private PSXObjectExporter[] _exporters;
         private TextureAtlas[] _atlases;
 
@@ -466,6 +469,11 @@ namespace SplashEdit.RuntimeCode
                 triggerBoxes = _triggerBoxes,
                 bakedSkinData = _bakedSkinData,
                 skinnedExporters = _skinnedExporters,
+                memCardEnabled = _psxData != null && _psxData.MemCardEnabled,
+                memCardRegion = _psxData != null ? _psxData.MemCardRegion : "BA",
+                memCardProduct = _psxData != null ? _psxData.MemCardProduct : "SLUS-00000",
+                memCardTitle = _psxData != null ? _psxData.MemCardTitle : "PSXSPLASH SAVE",
+                memCardIcons = _psxData != null ? _psxData.MemCardIcons : null,
             };
 
             PSXSceneWriter.Write(path, in scene, (msg, type) =>

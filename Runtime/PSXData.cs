@@ -14,5 +14,14 @@ namespace SplashEdit.RuntimeCode
         public bool DualBuffering = true;
         public bool VerticalBuffering = true;
         public List<ProhibitedArea> ProhibitedAreas = new List<ProhibitedArea>();
+
+        // Memory card save settings (global, splashpack v21). These are packed
+        // into every scene's splashpack so the runtime can build Sony-format
+        // save files and show them in the BIOS memory card manager.
+        public bool MemCardEnabled = false;
+        public string MemCardRegion = "BA";          // BA=America, BE=Europe, BI=Japan
+        public string MemCardProduct = "SLUS-00000";  // up to 10 chars
+        public string MemCardTitle = "PSXSPLASH SAVE"; // ASCII, up to 32 chars
+        public Texture2D[] MemCardIcons = new Texture2D[0]; // 1..3 frames, each 16x16
     }
 }

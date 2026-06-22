@@ -27,13 +27,14 @@ namespace SplashEdit.EditorCode
         // ───── UI State ─────
         private Vector2 _scrollPos;
         private int _selectedTab = 0;
-        private static readonly string[] _tabNames = { "Dependencies", "Scenes", "Music (CD-DA)", "Build" };
+        private static readonly string[] _tabNames = { "Dependencies", "Scenes", "Music (CD-DA)", "Build", "Memory Card" };
         private bool _showNativeProject = true;
         private bool _showToolchainSection = true;
         private bool _showScenesSection = true;
         private bool _showMusicSection = true;
         private bool _showVRAMSection = true;
         private bool _showBuildSection = true;
+        private bool _showMemCardSection = true;
 
         // ───── Build State ─────
         private static bool _isBuilding;
@@ -175,6 +176,9 @@ namespace SplashEdit.EditorCode
                     break;
                 case 3: // Build
                     DrawBuildSection();
+                    break;
+                case 4: // Memory Card
+                    DrawMemoryCardSection();
                     break;
             }
 
@@ -702,6 +706,65 @@ namespace SplashEdit.EditorCode
 
             // Handle drag & drop
             HandleSceneDragDrop();
+
+            EditorGUILayout.EndVertical();
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // Memory Card Section (global project save settings)
+        // ═══════════════════════════════════════════════════════════════
+
+        private void DrawMemoryCardSection()
+        {
+            _showMemCardSection = DrawSectionFoldout("Memory Card Saves", _showMemCardSection);
+            if (!_showMemCardSection) return;
+
+            EditorGUILayout.BeginVertical(PSXEditorStyles.CardStyle);
+
+            GUILayout.Label(
+                "Global save settings. These are packed into every scene's splashpack so the\n" +
+                "runtime can write Sony-format saves that show up in the BIOS memory card manager.",
+                EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.Space(4);
+
+            PSXData data = DataStorage.LoadData();
+            SerializedObject so = new SerializedObject(data);
+            so.Update();
+
+            SerializedProperty enabledProp = so.FindProperty("MemCardEnabled");
+            EditorGUILayout.PropertyField(enabledProp,
+                new GUIContent("Enable Saves", "Pack memory card save configuration into the splashpack."));
+
+            EditorGUI.BeginDisabledGroup(!enabledProp.boolValue);
+            EditorGUILayout.PropertyField(so.FindProperty("MemCardRegion"),
+                new GUIContent("Region Code", "Two letters: BA = America, BE = Europe, BI = Japan."));
+            EditorGUILayout.PropertyField(so.FindProperty("MemCardProduct"),
+                new GUIContent("Product Code", "Up to 10 chars, e.g. SLUS-00000. Builds the Sony save filename."));
+            EditorGUILayout.PropertyField(so.FindProperty("MemCardTitle"),
+                new GUIContent("Save Title", "Shown in the BIOS memory card manager (ASCII, up to 32 chars)."));
+            EditorGUILayout.PropertyField(so.FindProperty("MemCardIcons"),
+                new GUIContent("Icon Frames (16x16)", "1 = static, 2-3 = animated. Frames should share frame 0's palette."),
+                true);
+            EditorGUI.EndDisabledGroup();
+
+            if (so.ApplyModifiedProperties())
+            {
+                DataStorage.StoreData(data);
+            }
+
+            if (data.MemCardEnabled)
+            {
+                if (string.IsNullOrEmpty(data.MemCardRegion) || data.MemCardRegion.Length != 2)
+                    EditorGUILayout.HelpBox("Region code should be exactly 2 characters (BA / BE / BI).", MessageType.Warning);
+                if (string.IsNullOrEmpty(data.MemCardProduct) || data.MemCardProduct.Length > 10)
+                    EditorGUILayout.HelpBox("Product code should be 1-10 characters, e.g. SLUS-00000.", MessageType.Warning);
+                if (!string.IsNullOrEmpty(data.MemCardTitle) && data.MemCardTitle.Length > 32)
+                    EditorGUILayout.HelpBox("Save title is longer than 32 characters and will be truncated.", MessageType.Warning);
+                if (data.MemCardIcons == null || data.MemCardIcons.Length == 0)
+                    EditorGUILayout.HelpBox("No icon assigned — a blank icon will be shown in the BIOS. Assign a 16x16 texture.", MessageType.Info);
+                else if (data.MemCardIcons.Length > 3)
+                    EditorGUILayout.HelpBox("Only the first 3 icon frames are used.", MessageType.Info);
+            }
 
             EditorGUILayout.EndVertical();
         }
@@ -1399,6 +1462,19 @@ namespace SplashEdit.EditorCode
                     {
                         loaderPath = SplashBuildPaths.GetSceneLoaderPackPath(i, scene.name);
                         ExportLoaderPack(exporter.LoadingScreenPrefab, loaderPath, i, scene.name);
+                    }
+                    else
+                    {
+                        // No loading screen assigned. Remove any stale .loading file
+                        // from a previous export so it isn't baked into the ISO and
+                        // loaded at runtime (the ISO build includes the file purely on
+                        // File.Exists, which would otherwise resurrect the old screen).
+                        string stalePack = SplashBuildPaths.GetSceneLoaderPackPath(i, scene.name);
+                        if (File.Exists(stalePack))
+                        {
+                            File.Delete(stalePack);
+                            Log($"Removed stale loading screen file for '{scene.name}'", LogType.Log);
+                        }
                     }
 
                     // Generate memory report for this scene

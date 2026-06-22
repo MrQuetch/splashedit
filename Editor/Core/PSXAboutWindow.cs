@@ -19,7 +19,8 @@ namespace SplashEdit.EditorCode
         {
             "Schizoidpropagandanetwork",
             "Mati Valdez Marzari",
-            "MiniStumpy"
+            "MiniStumpy",
+            "Jakob Davinroy"
         };
 
         [Serializable]
