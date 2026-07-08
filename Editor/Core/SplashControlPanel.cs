@@ -2423,7 +2423,9 @@ namespace SplashEdit.EditorCode
 
                 xml.AppendLine("    <directory_tree>");
 
-                // SYSTEM.CNF — must be first for BIOS to find it
+                // SYSTEM.CNF — the BIOS locates this by scanning only the first
+                // sector of the root directory, so the root must stay small enough
+                // that SYSTEM.CNF's record fits there (see the SCENES/ dir below).
                 string cnfPath = SplashBuildPaths.SystemCnfPath;
                 xml.AppendLine($"      <file name=\"SYSTEM.CNF\" source=\"{EscapeXml(cnfPath)}\"/>");
 
@@ -2439,36 +2441,67 @@ namespace SplashEdit.EditorCode
                     xml.AppendLine($"      <file name=\"MANIFEST.BIN\" source=\"{EscapeXml(manifestPath)}\"/>");
                 }
 
-                // Scene splashpacks, VRAM data, SPU data, and loading packs
+                // Scene splashpacks, VRAM data, SPU data, and loading packs.
+                //
+                // Each scene gets its OWN subdirectory (SCENE0/, SCENE1/, ...)
+                // rather than sitting flat in the ISO root or lumped into one big
+                // shared folder. Two separate PlayStation limits force this:
+                //
+                //  1. Boot: the BIOS boot ROM only scans the *first* 2048-byte
+                //     sector of the ROOT directory when looking for SYSTEM.CNF.
+                //     A flat root with many scenes grows past one sector and —
+                //     because ISO9660 sorts entries alphabetically — "SYSTEM.CNF"
+                //     (which sorts after every "SCENE_*") spills into the second
+                //     sector, becomes invisible, and the console falls back to
+                //     cdrom:\PSX.EXE;1 (black screen, no boot).
+                //
+                //  2. Runtime: psyqo's ISO9660Parser caches one directory sector
+                //     at a time. Any single directory that spans MORE than one
+                //     sector forces its multi-sector "continuation" read — it reads
+                //     directory sector N, then from that read's completion callback
+                //     immediately reads the physically-adjacent sector N+1. That
+                //     READN→PAUSE→immediate-adjacent-READN pattern desyncs the CD
+                //     drive and aborts ("ReadSectorsAction got CDROM acknowledge in
+                //     wrong state"). A single shared SCENES/ folder with all files
+                //     is 2+ sectors and hits this; per-scene folders never do.
+                //
+                // Giving each scene its own folder keeps EVERY directory on the disc
+                // (root and each SCENEn/) within a single sector, no matter how many
+                // scenes or how many files per scene. The runtime CDRom loader builds
+                // matching "SCENE{i}/..." paths (see FileLoader::Build*Filename).
                 for (int i = 0; i < _sceneList.Count; i++)
                 {
+                    xml.AppendLine($"      <dir name=\"SCENE{i}\">");
+
                     string splashpack = SplashBuildPaths.GetSceneSplashpackPath(i, _sceneList[i].name);
                     if (File.Exists(splashpack))
                     {
                         string isoName = $"SCENE_{i}.SPK";
-                        xml.AppendLine($"      <file name=\"{isoName}\" source=\"{EscapeXml(splashpack)}\"/>");
+                        xml.AppendLine($"        <file name=\"{isoName}\" source=\"{EscapeXml(splashpack)}\"/>");
                     }
 
                     string vramFile = SplashBuildPaths.GetSceneVramPath(i, _sceneList[i].name);
                     if (File.Exists(vramFile))
                     {
                         string isoName = $"SCENE_{i}.VRM";
-                        xml.AppendLine($"      <file name=\"{isoName}\" source=\"{EscapeXml(vramFile)}\"/>");
+                        xml.AppendLine($"        <file name=\"{isoName}\" source=\"{EscapeXml(vramFile)}\"/>");
                     }
 
                     string spuFile = SplashBuildPaths.GetSceneSpuPath(i, _sceneList[i].name);
                     if (File.Exists(spuFile))
                     {
                         string isoName = $"SCENE_{i}.SPU";
-                        xml.AppendLine($"      <file name=\"{isoName}\" source=\"{EscapeXml(spuFile)}\"/>");
+                        xml.AppendLine($"        <file name=\"{isoName}\" source=\"{EscapeXml(spuFile)}\"/>");
                     }
 
                     string loadingPack = SplashBuildPaths.GetSceneLoaderPackPath(i, _sceneList[i].name);
                     if (File.Exists(loadingPack))
                     {
                         string isoName = $"SCENE_{i}.LDG";
-                        xml.AppendLine($"      <file name=\"{isoName}\" source=\"{EscapeXml(loadingPack)}\"/>");
+                        xml.AppendLine($"        <file name=\"{isoName}\" source=\"{EscapeXml(loadingPack)}\"/>");
                     }
+
+                    xml.AppendLine("      </dir>");
                 }
 
                 // Trailing dummy sectors to prevent drive runaway
